@@ -1,0 +1,106 @@
+---
+title: "Time Dependent Data Project"
+author: "Justin Jones"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+Rising temperatures have been a studied issue for a long time, with many useful datasets arising such as the monthly central England temperature series from 1659 to 2022. Taking a first look at this dataset, we can produce the following:
+
+```{r}
+data <- read.table("meantemp_monthly_totals.txt",header=T)
+plot(data$Year[1:363],data$Annual[1:363],type='o',ylab='Average Temp (Celsius)',xlab='Year',main='Average Central England Temperature 1659-2021')
+```
+
+Simply looking at the above plot, it is fairly evident that there is an increase in temperature overtime.
+
+```{r}
+plot.ts(data$Annual[1:363])
+acf(data$Annual[1:363],lag.max =length(data$Annual[1:363]))
+```
+
+This data does not appear to be stationary based on both the ACF and plot, so we will diff it.
+
+```{r}
+par(mfrow=c(2,1))
+plot.ts(diff(data$Annual[1:363]),type='o')
+mean(diff(data$Annual[1:363]))
+acf(diff(data$Annual[1:363]),lag.max =length(data$Annual[1:363]))
+```
+
+Now, the plot and the ACF both look stationary, meaning the data was correctly altered. We can now check the ACF2 to see if we can fit an ARMA model.
+
+```{r}
+library(astsa)
+acf2(diff(data$Annual[1:363]))
+acf(data$Annual[1:363])
+```
+
+The ACF appears to cut off at a lag of 1 and the PACF seems to tail off, so it may be an MA(1). They also both seem to tail off, so we might be able to fit an ARMA(1,2) model. Later, with this in mind, we can make predictions.
+
+```{r}
+sarima(data$Annual[1:363],0,1,1)$AIC
+```
+
+```{r}
+sarima(data$Annual[1:363],0,1,2)$AIC
+```
+
+```{r}
+sarima(data$Annual[1:363],1,1,2)$AIC
+```
+
+```{r}
+sarima(data$Annual[1:363],1,1,1)$AIC
+```
+
+```{r}
+sarima(data$Annual[1:363],1,1,2)$AIC # based on AIC values, this seems to be the best
+sarima.for(data$Annual[1:363],n.ahead=100,1,1,2)
+```
+
+Our prediction here seems to be that the average annual temperature will decrease in the next few years before increasing.
+
+Next, looking at Vaidyanathan (2016), there are claims that rising temperatures slowed in the 2000s, adding that in the 2010s the slowdown ended. To verify these results for Central England, I plan to first look at the data until 2000 and predict the following 20 years, then look at the difference from the actual temperature. If the resulting predictions are lower on average than the true results by a significant amount, the slowdown appears in our data. We can also see if trends continued as they used to for the following 10 years we now have data for.
+
+```{r}
+acf2(diff(data$Annual[1:336])) # we have very similar acf and pacf data, so same model works as for before
+sarima.for(data$Annual[1:336],n.ahead=100,1,1,2)
+```
+
+Thus we can get predictions of the differenced data for the 2000s as seen above. Looking at the plot, it seems that there was not a slowdown. The trends are continuing to be followed as said by NOAA. In the long run, there is still warming occurring. The dip still follows the prediction of the best model, albeit a bit slow; while my prediction does not go above 10 for a little while, annual average temperature has gone back up to 10s already and even reached 11.
+
+It was in consideration to use SARIMA for the modelling, however there is a break in the data from 1970 to 2000 as explained in one of the journals. Thus, to avoid errors, I used ARMA without seasonal inputs.
+
+Additionally, we can also try using auto.arima to see if we get different results:
+
+```{r}
+library(forecast)
+fit = auto.arima(data$Annual[1:363])
+plot(forecast(fit,50))
+```
+
+and using data from 20-363 to train gives different information:
+
+```{r}
+fit = auto.arima(data$Annual[20:363])
+plot(forecast(fit,50))
+```
+
+This assigned an MA(1) with the full dataset and ARMA(2,1) with drift for the shorter dataset and proposes that the temperature will be the same and slowly increase, respectively. 
+
+Finally, trying to predict the 2000s given the prior data as before, we get that the temperature stagnates after an initial dip, agreeing with the statement that the slowdown follows the same pattern:
+
+```{r}
+fit = auto.arima(data$Annual[1:336])
+plot(forecast(fit,20))
+```
+```{r}
+fit = auto.arima(data$Annual[20:336])
+plot(forecast(fit,20))
+```
+
